@@ -1,0 +1,23 @@
+# Requisitos principais
+fastapi==0.109.1
+uvicorn==0.27.0
+python-dotenv==1.0.0
+
+# Para manipulação de documentos
+python-docx==0.8.11
+docxtpl==0.16.5
+
+# Para manipulação de dados
+pandas==2.1.4
+openpyxl==3.1.2  # Necessário para pandas ler arquivos .xlsx
+xlrd==2.0.1      # Suporte para formatos mais antigos do Excel
+
+# Utilitários
+python-multipart==0.0.6  # Necessário para uploads de arquivos no FastAPI
+pathlib==1.0.1           # Para manipulação de caminhos (Python < 3.4)
+loguru==0.7.2            # Para logging avançado (opcional)
+
+
+# Para geração de PDF (se necessário no futuro)
+reportlab==4.0.4
+pdf2docx==0.5.7
