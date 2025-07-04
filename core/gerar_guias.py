@@ -46,7 +46,7 @@ def encontrar_coluna(df, padroes):
     return None
 
 def filtrar_dataframe(df, ano_serie, bimestre):
-    """Filtra o dataframe de forma robusta, com tratamento flexível para ano/série"""
+    """Filtra o dataframe de forma robusta, com tratamento flexível para ano/série e bimestre"""
     try:
         # Cria cópias das colunas como strings
         df = df.copy()
@@ -56,15 +56,24 @@ def filtrar_dataframe(df, ano_serie, bimestre):
         if not numero_serie:
             raise ValueError(f"Formato inválido para Ano/Série: {ano_serie}")
         
-        # Cria coluna temporária com números extraídos
-        df['_ano_temp'] = df['AnoSerie'].astype(str).apply(extrair_numero_serie)
+        # Cria coluna temporária com números extraídos (mais flexível)
+        df['_ano_temp'] = df['AnoSerie'].astype(str).apply(
+            lambda x: extrair_numero_serie(x) or normalizar_texto(x)
+        )
         
-        # Cria máscara para o bimestre
-        df['_bim_temp'] = df['Bimestre'].astype(str).apply(normalizar_texto)
-        mask_bim = df['_bim_temp'].str.contains(normalizar_texto(bimestre), na=False, regex=False)
+        # Cria máscara para o bimestre (aceita número ou texto completo)
+        df['_bim_temp'] = df['Bimestre'].astype(str).apply(
+            lambda x: extrair_numero_serie(x) or normalizar_texto(x)
+        )
         
-        # Aplica filtro para ano/série (comparando apenas os números)
-        mask_ano = df['_ano_temp'] == numero_serie
+        # Prepara valor de busca para bimestre (aceita número ou texto)
+        bimestre_busca = extrair_numero_serie(bimestre) or normalizar_texto(bimestre)
+        
+        # Aplica filtro para ano/série (comparando números ou texto normalizado)
+        mask_ano = df['_ano_temp'].str.contains(numero_serie, na=False, regex=False)
+        
+        # Aplica filtro para bimestre (comparando números ou texto normalizado)
+        mask_bim = df['_bim_temp'].str.contains(bimestre_busca, na=False, regex=False)
         
         # Aplica filtro combinado
         filtered_df = df[mask_ano & mask_bim].copy()
@@ -72,7 +81,17 @@ def filtrar_dataframe(df, ano_serie, bimestre):
         # Remove colunas temporárias
         filtered_df.drop(['_ano_temp', '_bim_temp'], axis=1, inplace=True)
         
-        return filtered_df[filtered_df['Titulo'].astype(str).str.strip().ne('')]
+        # Filtra linhas com título não vazio
+        result = filtered_df[filtered_df['Titulo'].astype(str).str.strip().ne('')]
+        
+        # Adiciona logs para depuração
+        if result.empty:
+            logging.warning(f"Nenhum dado encontrado com os filtros:")
+            logging.warning(f"Ano/Série buscado: {numero_serie} | Valores únicos na planilha: {df['AnoSerie'].unique()}")
+            logging.warning(f"Bimestre buscado: {bimestre_busca} | Valores únicos na planilha: {df['Bimestre'].unique()}")
+        
+        return result
+        
     except Exception as e:
         raise ValueError(f"Erro ao filtrar dados: {str(e)}")
 
