@@ -96,7 +96,7 @@ def filtrar_dataframe(df, ano_serie, bimestre):
         raise ValueError(f"Erro ao filtrar dados: {str(e)}")
 
 def formatar_fontes(fontes) -> str:
-    """Formata as fontes para o template mostrando apenas os valores"""
+    """Formata as fontes para o template incluindo nome, descrição e link"""
     if not fontes:
         # Fallback padrão se não houver fontes
         return "• Materiais didáticos\n\n• Plataformas digitais\n\n• Orientação do professor"
@@ -109,23 +109,31 @@ def formatar_fontes(fontes) -> str:
         
         formatted = []
         for fonte in fontes[:5]:  # Limita a 5 fontes
-            # Pega os valores, usando fallback se não existirem
+            # Obtém todos os campos (com fallback para string vazia se não existir)
             nome = fonte.get('fonte_nome', 'Fonte sem nome')
             descricao = fonte.get('descricao', '')
             link = fonte.get('link', '')
             
             # Constrói o item formatado
-            item = f"• {nome}\n"
+            item = f"• {nome}"
             if descricao:
-                item += f"  {descricao}\n"
+                item += f"\n  Descrição: {descricao}"
             if link:
-                item += f"  {link}"
+                item += f"\n  Link: {link}"
             
-            formatted.append(item.strip())  # Remove espaços extras
+            formatted.append(item)  # Adiciona o item formatado
             formatted.append("")  # Linha em branco entre fontes
         
         # Remove a última linha em branco extra
         return '\n'.join(formatted).strip()
+    
+    except Exception as e:
+        logging.warning(f"Erro ao formatar fontes: {str(e)}")
+        # Fallback para formato simples se houver erro
+        if isinstance(fontes, (list, str)):
+            simple_fonts = [f['fonte_nome'] for f in fontes] if hasattr(fontes[0], 'get') else fontes
+            return '\n\n'.join(f'• {f}' for f in simple_fonts[:5])
+        return formatar_fontes(None)
     
     except Exception as e:
         logging.warning(f"Erro ao formatar fontes: {str(e)}")
