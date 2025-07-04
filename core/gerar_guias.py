@@ -96,65 +96,50 @@ def filtrar_dataframe(df, ano_serie, bimestre):
         raise ValueError(f"Erro ao filtrar dados: {str(e)}")
 
 def formatar_fontes(fontes) -> str:
-    """Formata as fontes para o template no formato:
-    • Nome da fonte
-      Descrição: texto da descrição
-      Link: url_do_link
-    """
+    """Formata as fontes para o template no formato especificado"""
     if not fontes:
         return "• Materiais didáticos\n\n• Plataformas digitais\n\n• Orientação do professor"
 
     try:
-        # Converte string JSON para objeto Python se necessário
+        # Se for string, tenta decodificar o JSON
         if isinstance(fontes, str):
             import json
             try:
-                fontes = json.loads(fontes)
-            except json.JSONDecodeError:
-                # Se não for JSON válido, trata como texto simples
-                return f"• {fontes}" if fontes.strip() else "• Nenhuma fonte disponível"
+                fontes = json.loads(fontes.replace("'", '"'))  # Garante aspas duplas
+            except json.JSONDecodeError as je:
+                logging.error(f"Erro ao decodificar JSON: {je}\nConteúdo: {fontes}")
+                return "• Formato de fontes inválido"
+        
+        # Se não for lista, converte para lista
+        if not isinstance(fontes, list):
+            fontes = [fontes] if fontes else []
         
         formatted = []
         for fonte in fontes[:5]:  # Limita a 5 fontes
-            # Extrai os campos com tratamento seguro
-            nome = str(fonte.get('fonte_nome', '')).strip()
-            descricao = str(fonte.get('descricao', '')).strip()
-            link = str(fonte.get('link', '')).strip()
+            try:
+                nome = str(fonte.get('fonte_nome', '')).strip()
+                descricao = str(fonte.get('descricao', '')).strip()
+                link = str(fonte.get('link', '')).strip()
 
-            if not nome:  # Ignora fontes sem nome
-                continue
+                if not nome:
+                    continue
+                    
+                item = f"• {nome}"
+                if descricao:
+                    item += f"\n  Descrição: {descricao}"
+                if link:
+                    item += f"\n  Link: {link}"
                 
-            # Constrói o item formatado
-            item = f"• {nome}"
-            if descricao:
-                item += f"\n  Descrição: {descricao}"
-            if link:
-                item += f"\n  Link: {link}"
-            
-            formatted.append(item)
+                formatted.append(item)
+            except Exception as e:
+                logging.warning(f"Erro ao formatar fonte: {e}\nFonte: {fonte}")
+                continue
         
-        # Junta com quebras de linha duplas entre itens
         return '\n\n'.join(formatted) if formatted else "• Nenhuma fonte disponível"
 
     except Exception as e:
-        logging.error(f"Erro ao formatar fontes: {str(e)}", exc_info=True)
-        return "• Erro ao formatar fontes de referência"
-    
-    except Exception as e:
-        logging.warning(f"Erro ao formatar fontes: {str(e)}")
-        # Fallback para formato simples se houver erro
-        if isinstance(fontes, (list, str)):
-            simple_fonts = [f['fonte_nome'] for f in fontes] if hasattr(fontes[0], 'get') else fontes
-            return '\n\n'.join(f'• {f}' for f in simple_fonts[:5])
-        return formatar_fontes(None)
-    
-    except Exception as e:
-        logging.warning(f"Erro ao formatar fontes: {str(e)}")
-        # Fallback para formato simples se houver erro
-        if isinstance(fontes, (list, str)):
-            simple_fonts = [f['fonte_nome'] for f in fontes] if hasattr(fontes[0], 'get') else fontes
-            return '\n\n'.join(f'• {f}' for f in simple_fonts[:5])
-        return formatar_fontes(None)
+        logging.error(f"Erro crítico ao formatar fontes: {str(e)}", exc_info=True)
+        return "• Erro ao processar fontes"
 
 def gerar_guias(professor: str, disciplina: str, ano_serie: str, bimestre: str, ciclo: int, 
                 base_path: Path = None, return_base64: bool = True, fontes = None) -> dict:
