@@ -121,90 +121,61 @@ import re
 from ast import literal_eval
 
 def formatar_fontes(fontes) -> str:
-    """Formata as fontes para o template com tratamento completo para strings inválidas"""
+    """Formata as fontes garantindo que todos os campos sejam impressos"""
     DEFAULT_RESPONSE = "• Materiais didáticos\n\n• Plataformas digitais\n\n• Orientação do professor"
     
     if not fontes:
         return DEFAULT_RESPONSE
 
     try:
-        # ETAPA 1: Normalização radical da entrada
+        # ETAPA 1: Normalização básica para strings JSON
         if isinstance(fontes, str):
-            # Remove múltiplas camadas de aspas e escapes
-            fontes_clean = fontes.strip()
-            while (fontes_clean.startswith('"') and fontes_clean.endswith('"')) or \
-                  (fontes_clean.startswith("'") and fontes_clean.endswith("'")):
+            # Remove aspas externas e escapes
+            fontes_clean = fontes.strip().replace('\\"', '"')
+            if fontes_clean.startswith('"') and fontes_clean.endswith('"'):
                 fontes_clean = fontes_clean[1:-1]
-            
-            fontes_clean = fontes_clean.replace('\\"', '"').replace("\\'", "'")
-            
-            # Debug: Mostrar conteúdo após limpeza
-            logging.debug(f"Conteúdo limpo: {fontes_clean}")
-            
-            # Caso especial: strings fragmentadas (como nos seus logs)
-            if '\n' in fontes_clean or fontes_clean.count('{') > 1:
-                # Reconstrói o JSON manualmente
-                partes = re.findall(r'\{.*?\}', fontes_clean.replace('\n', ''))
-                fontes_clean = f'[{",".join(partes)}]' if partes else '[]'
             
             # Tenta parsear como JSON
             try:
                 dados_fontes = json.loads(fontes_clean)
             except json.JSONDecodeError:
-                try:
-                    # Fallback para avaliação segura
-                    dados_fontes = literal_eval(fontes_clean)
-                except:
-                    logging.error("Falha ao decodificar fontes após múltiplas tentativas")
-                    return DEFAULT_RESPONSE
+                # Fallback para strings que não são JSON válido
+                return f"• {fontes_clean}" if fontes_clean else DEFAULT_RESPONSE
         else:
             dados_fontes = fontes
 
-        # ETAPA 2: Garantir que temos uma lista de dicionários
+        # ETAPA 2: Garantir que temos uma lista
         if not isinstance(dados_fontes, list):
-            dados_fontes = [dados_fontes] if isinstance(dados_fontes, dict) else []
-        
-        fontes_validas = []
-        for item in dados_fontes:
-            if isinstance(item, dict):
-                fontes_validas.append(item)
-            elif isinstance(item, str):
-                try:
-                    # Tenta parsear strings individuais
-                    parsed = json.loads(item)
-                    if isinstance(parsed, dict):
-                        fontes_validas.append(parsed)
-                except:
-                    logging.warning(f"Ignorando item inválido: {item}")
-                    continue
-        
-        # ETAPA 3: Formatação final
+            dados_fontes = [dados_fontes] if dados_fontes else []
+
+        # ETAPA 3: Processamento seguro das fontes
         itens_formatados = []
-        for fonte in fontes_validas[:5]:  # Limita a 5 fontes
+        for fonte in dados_fontes[:5]:  # Limita a 5 fontes
             try:
-                nome = str(fonte.get('fonte_nome') or fonte.get('nome') or '').strip()
-                if not nome:
-                    continue
+                # Extração direta dos campos (sem .get() para forçar erro se não existir)
+                nome = str(fonte['fonte_nome']).strip()
+                descricao = str(fonte['descricao']).strip() if 'descricao' in fonte else ''
+                link = str(fonte['link']).strip() if 'link' in fonte else ''
                 
+                # Construção do item formatado
                 item = f"• {nome}"
-                
-                descricao = str(fonte.get('descricao') or fonte.get('description') or '').strip()
                 if descricao:
                     item += f"\n  Descrição: {descricao}"
-                
-                link = str(fonte.get('link') or fonte.get('url') or '').strip()
                 if link:
                     item += f"\n  Link: {link}"
                 
                 itens_formatados.append(item)
+            except KeyError as e:
+                logging.error(f"Campo obrigatório faltando: {str(e)}")
+                continue
             except Exception as e:
-                logging.error(f"Erro ao formatar fonte: {str(e)}")
+                logging.error(f"Erro ao processar fonte: {str(e)}")
                 continue
 
         return '\n\n'.join(itens_formatados) if itens_formatados else "• Nenhuma fonte disponível"
 
     except Exception as e:
-        logging.error(f"ERRO CRÍTICO: {str(e)}", exc_info=True)
+        logging.error(f"Erro crítico: {str(e)}")
         return DEFAULT_RESPONSE
 
 def gerar_guias(professor: str, disciplina: str, ano_serie: str, bimestre: str, ciclo: int, 
