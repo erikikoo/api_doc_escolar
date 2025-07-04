@@ -155,6 +155,10 @@ def formatar_fontes(fontes) -> str:
             except Exception as e:
                 logging.warning(f"Erro ao processar fonte: {e}\nFonte: {fonte}")
                 continue
+
+                print(f"Debug - fontes recebidas: {repr(fontes)}")
+print(f"Debug - fontes após parse: {repr(fontes_list)}")
+print(f"Debug - itens formatados: {repr(formatted)}")
         
         return '\n\n'.join(formatted) if formatted else "• Nenhuma fonte disponível"
 
