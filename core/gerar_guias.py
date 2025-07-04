@@ -95,72 +95,70 @@ def filtrar_dataframe(df, ano_serie, bimestre):
     except Exception as e:
         raise ValueError(f"Erro ao filtrar dados: {str(e)}")
 
+import json
+import logging
+from ast import literal_eval
+
 def formatar_fontes(fontes) -> str:
-    """Formata as fontes para o template incluindo nome, descrição e link"""
+    """Formata as fontes para exibição no template"""
     if not fontes:
         return "• Materiais didáticos\n\n• Plataformas digitais\n\n• Orientação do professor"
 
     try:
-        # Caso 1: Já é uma lista de dicionários (formato ideal)
-        if isinstance(fontes, list):
-            fontes_list = fontes
-        
-        # Caso 2: String JSON com escapes (seu caso específico)
-        elif isinstance(fontes, str):
-            import json
-            try:
-                # Remove aspas externas e escapes desnecessários
-                fontes_clean = fontes.strip()
-                if fontes_clean.startswith('"[') and fontes_clean.endswith(']"'):
-                    fontes_clean = fontes_clean[1:-1]  # Remove aspas externas
-                fontes_clean = fontes_clean.replace('\\"', '"')  # Remove escapes
-                
-                fontes_list = json.loads(fontes_clean)
-                
-                # Verifica se o parsing resultou em uma lista
-                if not isinstance(fontes_list, list):
-                    fontes_list = [fontes_list] if fontes_list else []
+        # Etapa 1: Normalização da string JSON
+        if isinstance(fontes, str):
+            # Remove possíveis aspas extras no início e fim
+            fontes = fontes.strip()
+            if fontes.startswith('"') and fontes.endswith('"'):
+                fontes = fontes[1:-1]
             
-            except json.JSONDecodeError as e:
-                logging.error(f"Falha ao decodificar JSON: {e}\nConteúdo original: {fontes}")
-                return "• Formato de fontes inválido"
-        
-        # Caso 3: Outros formatos não suportados
-        else:
-            logging.error(f"Formato de fontes não reconhecido: {type(fontes)}")
-            return "• Formato de fontes não suportado"
-        
-        # Processa cada fonte
-        formatted = []
-        for fonte in fontes_list[:5]:  # Limita a 5 fontes
+            # Substitui escapes de aspas
+            fontes = fontes.replace('\\"', '"')
+            
+            # Tenta converter a string JSON para objeto Python
             try:
+                dados_fontes = json.loads(fontes)
+            except json.JSONDecodeError:
+                # Fallback para eval seguro (apenas se json.loads falhar)
+                try:
+                    dados_fontes = literal_eval(fontes)
+                except:
+                    logging.error("Falha ao decodificar string JSON")
+                    return "• Formato de fontes inválido"
+        
+        # Etapa 2: Garantir que temos uma lista
+        if not isinstance(dados_fontes, list):
+            dados_fontes = [dados_fontes] if dados_fontes else []
+        
+        # Etapa 3: Processamento das fontes
+        itens_formatados = []
+        for fonte in dados_fontes[:5]:  # Limita a 5 fontes
+            try:
+                # Extração segura dos campos
                 nome = fonte.get('fonte_nome', '').strip()
                 if not nome:
                     continue
                 
+                # Construção do item formatado
                 item = f"• {nome}"
                 
-                if 'descricao' in fonte:
-                    descricao = str(fonte['descricao']).strip()
-                    if descricao:
-                        item += f"\n  Descrição: {descricao}"
+                descricao = fonte.get('descricao', '').strip()
+                if descricao:
+                    item += f"\n  Descrição: {descricao}"
                 
-                if 'link' in fonte:
-                    link = str(fonte['link']).strip()
-                    if link:
-                        item += f"\n  Link: {link}"
+                link = fonte.get('link', '').strip()
+                if link:
+                    item += f"\n  Link: {link}"
                 
-                formatted.append(item)
-            
+                itens_formatados.append(item)
             except Exception as e:
-                logging.warning(f"Erro ao processar fonte: {e}\nFonte: {fonte}")
+                logging.warning(f"Erro ao processar fonte: {str(e)}")
                 continue
-               
         
-        return '\n\n'.join(formatted) if formatted else "• Nenhuma fonte disponível"
+        return '\n\n'.join(itens_formatados) if itens_formatados else "• Nenhuma fonte disponível"
 
     except Exception as e:
-        logging.error(f"Erro crítico ao formatar fontes: {str(e)}", exc_info=True)
+        logging.error(f"Erro crítico: {str(e)}")
         return "• Erro ao processar fontes"
 
 def gerar_guias(professor: str, disciplina: str, ano_serie: str, bimestre: str, ciclo: int, 
