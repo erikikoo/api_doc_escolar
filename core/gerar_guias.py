@@ -96,24 +96,34 @@ def filtrar_dataframe(df, ano_serie, bimestre):
         raise ValueError(f"Erro ao filtrar dados: {str(e)}")
 
 def formatar_fontes(fontes) -> str:
-    """Formata as fontes para o template incluindo nome, descrição e link"""
+    """Formata as fontes para o template no formato:
+    • Nome da fonte
+      Descrição: texto da descrição
+      Link: url_do_link
+    """
     if not fontes:
-        # Fallback padrão se não houver fontes
         return "• Materiais didáticos\n\n• Plataformas digitais\n\n• Orientação do professor"
-    
+
     try:
-        # Verifica se é uma string JSON e converte
+        # Converte string JSON para objeto Python se necessário
         if isinstance(fontes, str):
             import json
-            fontes = json.loads(fontes)
+            try:
+                fontes = json.loads(fontes)
+            except json.JSONDecodeError:
+                # Se não for JSON válido, trata como texto simples
+                return f"• {fontes}" if fontes.strip() else "• Nenhuma fonte disponível"
         
         formatted = []
         for fonte in fontes[:5]:  # Limita a 5 fontes
-            # Obtém todos os campos (com fallback para string vazia se não existir)
-            nome = fonte.get('fonte_nome', 'Fonte sem nome')
-            descricao = fonte.get('descricao', '')
-            link = fonte.get('link', '')
-            
+            # Extrai os campos com tratamento seguro
+            nome = str(fonte.get('fonte_nome', '')).strip()
+            descricao = str(fonte.get('descricao', '')).strip()
+            link = str(fonte.get('link', '')).strip()
+
+            if not nome:  # Ignora fontes sem nome
+                continue
+                
             # Constrói o item formatado
             item = f"• {nome}"
             if descricao:
@@ -121,11 +131,14 @@ def formatar_fontes(fontes) -> str:
             if link:
                 item += f"\n  Link: {link}"
             
-            formatted.append(item)  # Adiciona o item formatado
-            formatted.append("")  # Linha em branco entre fontes
+            formatted.append(item)
         
-        # Remove a última linha em branco extra
-        return '\n'.join(formatted).strip()
+        # Junta com quebras de linha duplas entre itens
+        return '\n\n'.join(formatted) if formatted else "• Nenhuma fonte disponível"
+
+    except Exception as e:
+        logging.error(f"Erro ao formatar fontes: {str(e)}", exc_info=True)
+        return "• Erro ao formatar fontes de referência"
     
     except Exception as e:
         logging.warning(f"Erro ao formatar fontes: {str(e)}")
