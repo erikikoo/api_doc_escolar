@@ -115,78 +115,83 @@ import json
 import logging
 import re
 
+import json
+import logging
+import re
+from ast import literal_eval
+
 def formatar_fontes(fontes) -> str:
-    """Formata as fontes para o template incluindo nome, descrição e link"""
+    """Formata as fontes incluindo tratamento robusto para strings inválidas"""
     DEFAULT_RESPONSE = "• Materiais didáticos\n\n• Plataformas digitais\n\n• Orientação do professor"
     
     if not fontes:
         return DEFAULT_RESPONSE
 
     try:
-        # ETAPA 1: Normalização radical da string JSON
-        if isinstance(fontes, str):
-            # Remove TODAS as aspas externas e escapes
-            fontes_clean = fontes.strip()
-            while (fontes_clean.startswith('"') and fontes_clean.endswith('"')) or (fontes_clean.startswith("'") and fontes_clean.endswith("'")):
-                fontes_clean = fontes_clean[1:-1]
-            
-            # Remove escapes restantes
-            fontes_clean = fontes_clean.replace('\\"', '"').replace("\\'", "'")
-            
-            # Corrige fragmentação (caso específico do seu log)
-            if '\n' in fontes_clean or fontes_clean.count('{') > 1:
-                # Reconstrói o JSON manualmente
-                partes = re.findall(r'\{.*?\}', fontes_clean.replace('\n', ''))
-                fontes_clean = f'[{",".join(partes)}]'
-            
-            logging.debug(f"JSON reconstruído: {fontes_clean}")
-            
+        # ETAPA 1: Normalização radical da entrada
+        fontes_clean = fontes.strip() if isinstance(fontes, str) else str(fontes)
+        
+        # Remove todas as camadas de aspas e escapes
+        while (fontes_clean.startswith('"') and fontes_clean.endswith('"')) or \
+              (fontes_clean.startswith("'") and fontes_clean.endswith("'")):
+            fontes_clean = fontes_clean[1:-1]
+        
+        fontes_clean = fontes_clean.replace('\\"', '"').replace("\\'", "'")
+        
+        # ETAPA 2: Reconstrução do JSON completo
+        if not (fontes_clean.startswith('[') and fontes_clean.endswith(']')):
+            # Caso esteja fragmentado, reconstrói manualmente
+            partes = re.findall(r'\{.*?\}', fontes_clean.replace('\n', ''))
+            fontes_clean = f'[{",".join(partes)}]' if partes else '[]'
+        
+        logging.debug(f"JSON reconstruído: {fontes_clean}")
+        
+        # ETAPA 3: Parsing definitivo
+        try:
+            dados_fontes = json.loads(fontes_clean)
+        except json.JSONDecodeError:
             try:
-                dados_fontes = json.loads(fontes_clean)
-                if not isinstance(dados_fontes, list):
-                    dados_fontes = [dados_fontes]
-            except json.JSONDecodeError:
+                dados_fontes = literal_eval(fontes_clean)
+            except:
+                logging.error("Falha crítica ao decodificar fontes")
+                return DEFAULT_RESPONSE
+        
+        # ETAPA 4: Garantir que temos uma lista de dicionários
+        if not isinstance(dados_fontes, list):
+            dados_fontes = [dados_fontes] if isinstance(dados_fontes, dict) else []
+        
+        fontes_validas = []
+        for item in dados_fontes:
+            if isinstance(item, dict):
+                fontes_validas.append(item)
+            elif isinstance(item, str):
                 try:
-                    # Última tentativa com eval seguro
-                    import ast
-                    dados_fontes = ast.literal_eval(fontes_clean)
-                    if not isinstance(dados_fontes, list):
-                        dados_fontes = [dados_fontes]
+                    # Tenta parsear a string individual
+                    parsed = json.loads(item)
+                    if isinstance(parsed, dict):
+                        fontes_validas.append(parsed)
                 except:
-                    logging.error("Falha crítica ao decodificar fontes")
-                    return DEFAULT_RESPONSE
+                    continue
         
-        elif isinstance(fontes, (list, dict)):
-            dados_fontes = fontes if isinstance(fontes, list) else [fontes]
-        else:
-            logging.error(f"Tipo de dado não suportado: {type(fontes)}")
-            return DEFAULT_RESPONSE
-
-        # ETAPA 2: Processamento das fontes
+        # ETAPA 5: Formatação final
         itens_formatados = []
-        
-        for fonte in dados_fontes[:5]:  # Limita a 5 fontes
-            if not isinstance(fonte, dict):
-                logging.warning(f"Ignorando fonte inválida: {type(fonte)}")
-                continue
-                
+        for fonte in fontes_validas[:5]:  # Limita a 5 fontes
             try:
-                nome = str(fonte.get('fonte_nome') or str(fonte.get('nome')) or '').strip()
+                nome = str(fonte.get('fonte_nome') or fonte.get('nome') or '').strip()
                 if not nome:
                     continue
                 
                 item = f"• {nome}"
                 
-                descricao = str(fonte.get('descricao') or str(fonte.get('description')) or '').strip()
+                descricao = str(fonte.get('descricao') or fonte.get('description') or '').strip()
                 if descricao:
                     item += f"\n  Descrição: {descricao}"
                 
-                link = str(fonte.get('link') or str(fonte.get('url')) or '').strip()
+                link = str(fonte.get('link') or fonte.get('url') or '').strip()
                 if link:
                     item += f"\n  Link: {link}"
                 
                 itens_formatados.append(item)
-                
             except Exception as e:
                 logging.error(f"Erro ao formatar fonte: {str(e)}")
                 continue
