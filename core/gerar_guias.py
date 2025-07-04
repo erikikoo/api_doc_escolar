@@ -111,6 +111,10 @@ import json
 import logging
 from ast import literal_eval
 
+import json
+import logging
+import re
+
 def formatar_fontes(fontes) -> str:
     """Formata as fontes para o template incluindo nome, descrição e link"""
     DEFAULT_RESPONSE = "• Materiais didáticos\n\n• Plataformas digitais\n\n• Orientação do professor"
@@ -119,34 +123,37 @@ def formatar_fontes(fontes) -> str:
         return DEFAULT_RESPONSE
 
     try:
-        # ETAPA 1: Normalização dos dados de entrada
-        dados_fontes = []
-        
+        # ETAPA 1: Normalização radical da string JSON
         if isinstance(fontes, str):
-            # Limpeza agressiva da string JSON
+            # Remove TODAS as aspas externas e escapes
             fontes_clean = fontes.strip()
-            
-            # Remove múltiplas camadas de escaping
-            while fontes_clean.startswith('"') and fontes_clean.endswith('"'):
+            while (fontes_clean.startswith('"') and fontes_clean.endswith('"')) or (fontes_clean.startswith("'") and fontes_clean.endswith("'")):
                 fontes_clean = fontes_clean[1:-1]
             
-            fontes_clean = fontes_clean.replace('\\"', '"')
-            fontes_clean = fontes_clean.replace("\\'", "'")
+            # Remove escapes restantes
+            fontes_clean = fontes_clean.replace('\\"', '"').replace("\\'", "'")
             
-            # Debug: Mostrar conteúdo após limpeza
-            logging.debug(f"Conteúdo limpo: {fontes_clean}")
+            # Corrige fragmentação (caso específico do seu log)
+            if '\n' in fontes_clean or fontes_clean.count('{') > 1:
+                # Reconstrói o JSON manualmente
+                partes = re.findall(r'\{.*?\}', fontes_clean.replace('\n', ''))
+                fontes_clean = f'[{",".join(partes)}]'
             
-            # Tenta parsear como JSON
+            logging.debug(f"JSON reconstruído: {fontes_clean}")
+            
             try:
-                parsed = json.loads(fontes_clean)
-                dados_fontes = parsed if isinstance(parsed, list) else [parsed]
+                dados_fontes = json.loads(fontes_clean)
+                if not isinstance(dados_fontes, list):
+                    dados_fontes = [dados_fontes]
             except json.JSONDecodeError:
-                # Fallback para avaliação segura
                 try:
-                    parsed = literal_eval(fontes_clean)
-                    dados_fontes = parsed if isinstance(parsed, list) else [parsed]
+                    # Última tentativa com eval seguro
+                    import ast
+                    dados_fontes = ast.literal_eval(fontes_clean)
+                    if not isinstance(dados_fontes, list):
+                        dados_fontes = [dados_fontes]
                 except:
-                    logging.error("Falha ao decodificar fontes")
+                    logging.error("Falha crítica ao decodificar fontes")
                     return DEFAULT_RESPONSE
         
         elif isinstance(fontes, (list, dict)):
@@ -155,52 +162,39 @@ def formatar_fontes(fontes) -> str:
             logging.error(f"Tipo de dado não suportado: {type(fontes)}")
             return DEFAULT_RESPONSE
 
-        # ETAPA 2: Garantir que todos os itens são dicionários
-        fontes_validas = []
-        for item in dados_fontes:
-            if isinstance(item, dict):
-                fontes_validas.append(item)
-            elif isinstance(item, str):
-                try:
-                    # Tenta parsear strings individuais
-                    parsed_item = json.loads(item)
-                    if isinstance(parsed_item, dict):
-                        fontes_validas.append(parsed_item)
-                except:
-                    logging.warning(f"Item não é dicionário: {item}")
-                    continue
-        
-        # ETAPA 3: Processamento das fontes
+        # ETAPA 2: Processamento das fontes
         itens_formatados = []
         
-        for fonte in fontes_validas[:5]:  # Limita a 5 fontes
+        for fonte in dados_fontes[:5]:  # Limita a 5 fontes
+            if not isinstance(fonte, dict):
+                logging.warning(f"Ignorando fonte inválida: {type(fonte)}")
+                continue
+                
             try:
-                # Extração segura dos campos
-                nome = str(fonte.get('fonte_nome') or fonte.get('nome') or '').strip()
+                nome = str(fonte.get('fonte_nome') or str(fonte.get('nome')) or '').strip()
                 if not nome:
                     continue
                 
-                # Construção do item formatado
-                item_parts = [f"• {nome}"]
+                item = f"• {nome}"
                 
-                descricao = str(fonte.get('descricao') or fonte.get('description') or '').strip()
+                descricao = str(fonte.get('descricao') or str(fonte.get('description')) or '').strip()
                 if descricao:
-                    item_parts.append(f"  Descrição: {descricao}")
+                    item += f"\n  Descrição: {descricao}"
                 
-                link = str(fonte.get('link') or fonte.get('url') or '').strip()
+                link = str(fonte.get('link') or str(fonte.get('url')) or '').strip()
                 if link:
-                    item_parts.append(f"  Link: {link}")
+                    item += f"\n  Link: {link}"
                 
-                itens_formatados.append('\n'.join(item_parts))
+                itens_formatados.append(item)
                 
             except Exception as e:
-                logging.error(f"Erro ao processar fonte: {str(e)}")
+                logging.error(f"Erro ao formatar fonte: {str(e)}")
                 continue
 
         return '\n\n'.join(itens_formatados) if itens_formatados else "• Nenhuma fonte disponível"
 
     except Exception as e:
-        logging.error(f"Erro crítico: {str(e)}")
+        logging.error(f"ERRO CRÍTICO: {str(e)}", exc_info=True)
         return DEFAULT_RESPONSE
 
 def gerar_guias(professor: str, disciplina: str, ano_serie: str, bimestre: str, ciclo: int, 
