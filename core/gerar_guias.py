@@ -101,27 +101,38 @@ def formatar_fontes(fontes) -> str:
         return "• Materiais didáticos\n\n• Plataformas digitais\n\n• Orientação do professor"
 
     try:
-        # Verifica se é uma string JSON (como no seu caso)
-        if isinstance(fontes, str):
-            # Remove possíveis escapes e normaliza as aspas
-            fontes_str = fontes.replace('\\"', '"').replace("'", '"').strip()
-            # Remove colchetes extras se existirem
-            if fontes_str.startswith('"[{') and fontes_str.endswith('}]"'):
-                fontes_str = fontes_str[1:-1]
-            
+        # Caso 1: Já é uma lista de dicionários (formato ideal)
+        if isinstance(fontes, list):
+            fontes_list = fontes
+        
+        # Caso 2: String JSON com escapes (seu caso específico)
+        elif isinstance(fontes, str):
             import json
             try:
-                fontes = json.loads(fontes_str)
+                # Remove aspas externas e escapes desnecessários
+                fontes_clean = fontes.strip()
+                if fontes_clean.startswith('"[') and fontes_clean.endswith(']"'):
+                    fontes_clean = fontes_clean[1:-1]  # Remove aspas externas
+                fontes_clean = fontes_clean.replace('\\"', '"')  # Remove escapes
+                
+                fontes_list = json.loads(fontes_clean)
+                
+                # Verifica se o parsing resultou em uma lista
+                if not isinstance(fontes_list, list):
+                    fontes_list = [fontes_list] if fontes_list else []
+            
             except json.JSONDecodeError as e:
-                logging.error(f"Erro ao decodificar JSON: {e}\nConteúdo: {fontes_str}")
+                logging.error(f"Falha ao decodificar JSON: {e}\nConteúdo original: {fontes}")
                 return "• Formato de fontes inválido"
         
-        # Garante que fontes seja uma lista
-        if not isinstance(fontes, list):
-            fontes = [fontes] if fontes else []
+        # Caso 3: Outros formatos não suportados
+        else:
+            logging.error(f"Formato de fontes não reconhecido: {type(fontes)}")
+            return "• Formato de fontes não suportado"
         
+        # Processa cada fonte
         formatted = []
-        for fonte in fontes[:5]:  # Limita a 5 fontes
+        for fonte in fontes_list[:5]:  # Limita a 5 fontes
             try:
                 nome = fonte.get('fonte_nome', '').strip()
                 if not nome:
@@ -129,15 +140,18 @@ def formatar_fontes(fontes) -> str:
                 
                 item = f"• {nome}"
                 
-                descricao = fonte.get('descricao', '').strip()
-                if descricao:
-                    item += f"\n  Descrição: {descricao}"
+                if 'descricao' in fonte:
+                    descricao = str(fonte['descricao']).strip()
+                    if descricao:
+                        item += f"\n  Descrição: {descricao}"
                 
-                link = fonte.get('link', '').strip()
-                if link:
-                    item += f"\n  Link: {link}"
+                if 'link' in fonte:
+                    link = str(fonte['link']).strip()
+                    if link:
+                        item += f"\n  Link: {link}"
                 
                 formatted.append(item)
+            
             except Exception as e:
                 logging.warning(f"Erro ao processar fonte: {e}\nFonte: {fonte}")
                 continue
