@@ -121,55 +121,75 @@ import re
 from ast import literal_eval
 
 def formatar_fontes(fontes) -> str:
-    """Formata as fontes garantindo que todos os campos sejam impressos"""
+    """Formata as fontes com tratamento robusto para todos os tipos de entrada"""
     DEFAULT_RESPONSE = "• Materiais didáticos\n\n• Plataformas digitais\n\n• Orientação do professor"
     
     if not fontes:
         return DEFAULT_RESPONSE
 
     try:
-        # ETAPA 1: Normalização básica para strings JSON
-        if isinstance(fontes, str):
-            # Remove aspas externas e escapes
-            fontes_clean = fontes.strip().replace('\\"', '"')
-            if fontes_clean.startswith('"') and fontes_clean.endswith('"'):
-                fontes_clean = fontes_clean[1:-1]
-            
-            # Tenta parsear como JSON
+        # ETAPA 1: Converter para lista de dicionários
+        fontes_list = []
+        
+        # Caso 1: Já é uma lista de dicionários
+        if isinstance(fontes, list) and all(isinstance(item, dict) for item in fontes):
+            fontes_list = fontes
+        
+        # Caso 2: String JSON (seu caso principal)
+        elif isinstance(fontes, str):
             try:
-                dados_fontes = json.loads(fontes_clean)
-            except json.JSONDecodeError:
-                # Fallback para strings que não são JSON válido
-                return f"• {fontes_clean}" if fontes_clean else DEFAULT_RESPONSE
-        else:
-            dados_fontes = fontes
-
-        # ETAPA 2: Garantir que temos uma lista
-        if not isinstance(dados_fontes, list):
-            dados_fontes = [dados_fontes] if dados_fontes else []
-
-        # ETAPA 3: Processamento seguro das fontes
-        itens_formatados = []
-        for fonte in dados_fontes[:5]:  # Limita a 5 fontes
-            try:
-                # Extração direta dos campos (sem .get() para forçar erro se não existir)
-                nome = str(fonte['fonte_nome']).strip()
-                descricao = str(fonte['descricao']).strip() if 'descricao' in fonte else ''
-                link = str(fonte['link']).strip() if 'link' in fonte else ''
+                # Limpeza básica da string
+                fontes_clean = fontes.strip()
                 
-                # Construção do item formatado
+                # Remove aspas externas se existirem
+                if fontes_clean.startswith('"') and fontes_clean.endswith('"'):
+                    fontes_clean = fontes_clean[1:-1]
+                
+                # Remove escapes
+                fontes_clean = fontes_clean.replace('\\"', '"')
+                
+                # Tenta parsear como JSON
+                parsed = json.loads(fontes_clean)
+                
+                # Converte para lista de dicionários
+                if isinstance(parsed, dict):
+                    fontes_list = [parsed]
+                elif isinstance(parsed, list):
+                    fontes_list = [item for item in parsed if isinstance(item, dict)]
+            
+            except json.JSONDecodeError:
+                # Se não for JSON válido, trata como texto simples
+                if fontes_clean:
+                    return f"• {fontes_clean}"
+                return DEFAULT_RESPONSE
+        
+        # Caso 3: Dicionário único
+        elif isinstance(fontes, dict):
+            fontes_list = [fontes]
+        
+        # ETAPA 2: Processar cada fonte
+        itens_formatados = []
+        for fonte in fontes_list[:5]:  # Limita a 5 fontes
+            try:
+                # Extração segura dos campos
+                nome = str(fonte.get('fonte_nome', fonte.get('nome', ''))).strip()
+                if not nome:
+                    continue
+                
                 item = f"• {nome}"
+                
+                descricao = str(fonte.get('descricao', fonte.get('description', ''))).strip()
                 if descricao:
                     item += f"\n  Descrição: {descricao}"
+                
+                link = str(fonte.get('link', fonte.get('url', ''))).strip()
                 if link:
                     item += f"\n  Link: {link}"
                 
                 itens_formatados.append(item)
-            except KeyError as e:
-                logging.error(f"Campo obrigatório faltando: {str(e)}")
-                continue
+            
             except Exception as e:
-                logging.error(f"Erro ao processar fonte: {str(e)}")
+                logging.error(f"Erro ao formatar fonte: {str(e)}")
                 continue
 
         return '\n\n'.join(itens_formatados) if itens_formatados else "• Nenhuma fonte disponível"
