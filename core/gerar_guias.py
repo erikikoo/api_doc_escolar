@@ -121,7 +121,7 @@ import re
 from ast import literal_eval
 
 def formatar_fontes(fontes) -> str:
-    """Formata as fontes incluindo tratamento robusto para strings inválidas"""
+    """Formata as fontes para o template com tratamento completo para strings inválidas"""
     DEFAULT_RESPONSE = "• Materiais didáticos\n\n• Plataformas digitais\n\n• Orientação do professor"
     
     if not fontes:
@@ -129,34 +129,38 @@ def formatar_fontes(fontes) -> str:
 
     try:
         # ETAPA 1: Normalização radical da entrada
-        fontes_clean = fontes.strip() if isinstance(fontes, str) else str(fontes)
-        
-        # Remove todas as camadas de aspas e escapes
-        while (fontes_clean.startswith('"') and fontes_clean.endswith('"')) or \
-              (fontes_clean.startswith("'") and fontes_clean.endswith("'")):
-            fontes_clean = fontes_clean[1:-1]
-        
-        fontes_clean = fontes_clean.replace('\\"', '"').replace("\\'", "'")
-        
-        # ETAPA 2: Reconstrução do JSON completo
-        if not (fontes_clean.startswith('[') and fontes_clean.endswith(']')):
-            # Caso esteja fragmentado, reconstrói manualmente
-            partes = re.findall(r'\{.*?\}', fontes_clean.replace('\n', ''))
-            fontes_clean = f'[{",".join(partes)}]' if partes else '[]'
-        
-        logging.debug(f"JSON reconstruído: {fontes_clean}")
-        
-        # ETAPA 3: Parsing definitivo
-        try:
-            dados_fontes = json.loads(fontes_clean)
-        except json.JSONDecodeError:
+        if isinstance(fontes, str):
+            # Remove múltiplas camadas de aspas e escapes
+            fontes_clean = fontes.strip()
+            while (fontes_clean.startswith('"') and fontes_clean.endswith('"')) or \
+                  (fontes_clean.startswith("'") and fontes_clean.endswith("'")):
+                fontes_clean = fontes_clean[1:-1]
+            
+            fontes_clean = fontes_clean.replace('\\"', '"').replace("\\'", "'")
+            
+            # Debug: Mostrar conteúdo após limpeza
+            logging.debug(f"Conteúdo limpo: {fontes_clean}")
+            
+            # Caso especial: strings fragmentadas (como nos seus logs)
+            if '\n' in fontes_clean or fontes_clean.count('{') > 1:
+                # Reconstrói o JSON manualmente
+                partes = re.findall(r'\{.*?\}', fontes_clean.replace('\n', ''))
+                fontes_clean = f'[{",".join(partes)}]' if partes else '[]'
+            
+            # Tenta parsear como JSON
             try:
-                dados_fontes = literal_eval(fontes_clean)
-            except:
-                logging.error("Falha crítica ao decodificar fontes")
-                return DEFAULT_RESPONSE
-        
-        # ETAPA 4: Garantir que temos uma lista de dicionários
+                dados_fontes = json.loads(fontes_clean)
+            except json.JSONDecodeError:
+                try:
+                    # Fallback para avaliação segura
+                    dados_fontes = literal_eval(fontes_clean)
+                except:
+                    logging.error("Falha ao decodificar fontes após múltiplas tentativas")
+                    return DEFAULT_RESPONSE
+        else:
+            dados_fontes = fontes
+
+        # ETAPA 2: Garantir que temos uma lista de dicionários
         if not isinstance(dados_fontes, list):
             dados_fontes = [dados_fontes] if isinstance(dados_fontes, dict) else []
         
@@ -166,14 +170,15 @@ def formatar_fontes(fontes) -> str:
                 fontes_validas.append(item)
             elif isinstance(item, str):
                 try:
-                    # Tenta parsear a string individual
+                    # Tenta parsear strings individuais
                     parsed = json.loads(item)
                     if isinstance(parsed, dict):
                         fontes_validas.append(parsed)
                 except:
+                    logging.warning(f"Ignorando item inválido: {item}")
                     continue
         
-        # ETAPA 5: Formatação final
+        # ETAPA 3: Formatação final
         itens_formatados = []
         for fonte in fontes_validas[:5]:  # Limita a 5 fontes
             try:
