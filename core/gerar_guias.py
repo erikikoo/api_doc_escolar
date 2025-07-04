@@ -96,43 +96,50 @@ def filtrar_dataframe(df, ano_serie, bimestre):
         raise ValueError(f"Erro ao filtrar dados: {str(e)}")
 
 def formatar_fontes(fontes) -> str:
-    """Formata as fontes para o template no formato especificado"""
+    """Formata as fontes para o template incluindo nome, descrição e link"""
     if not fontes:
         return "• Materiais didáticos\n\n• Plataformas digitais\n\n• Orientação do professor"
 
     try:
-        # Se for string, tenta decodificar o JSON
+        # Verifica se é uma string JSON (como no seu caso)
         if isinstance(fontes, str):
+            # Remove possíveis escapes e normaliza as aspas
+            fontes_str = fontes.replace('\\"', '"').replace("'", '"').strip()
+            # Remove colchetes extras se existirem
+            if fontes_str.startswith('"[{') and fontes_str.endswith('}]"'):
+                fontes_str = fontes_str[1:-1]
+            
             import json
             try:
-                fontes = json.loads(fontes.replace("'", '"'))  # Garante aspas duplas
-            except json.JSONDecodeError as je:
-                logging.error(f"Erro ao decodificar JSON: {je}\nConteúdo: {fontes}")
+                fontes = json.loads(fontes_str)
+            except json.JSONDecodeError as e:
+                logging.error(f"Erro ao decodificar JSON: {e}\nConteúdo: {fontes_str}")
                 return "• Formato de fontes inválido"
         
-        # Se não for lista, converte para lista
+        # Garante que fontes seja uma lista
         if not isinstance(fontes, list):
             fontes = [fontes] if fontes else []
         
         formatted = []
         for fonte in fontes[:5]:  # Limita a 5 fontes
             try:
-                nome = str(fonte.get('fonte_nome', '')).strip()
-                descricao = str(fonte.get('descricao', '')).strip()
-                link = str(fonte.get('link', '')).strip()
-
+                nome = fonte.get('fonte_nome', '').strip()
                 if not nome:
                     continue
-                    
+                
                 item = f"• {nome}"
+                
+                descricao = fonte.get('descricao', '').strip()
                 if descricao:
                     item += f"\n  Descrição: {descricao}"
+                
+                link = fonte.get('link', '').strip()
                 if link:
                     item += f"\n  Link: {link}"
                 
                 formatted.append(item)
             except Exception as e:
-                logging.warning(f"Erro ao formatar fonte: {e}\nFonte: {fonte}")
+                logging.warning(f"Erro ao processar fonte: {e}\nFonte: {fonte}")
                 continue
         
         return '\n\n'.join(formatted) if formatted else "• Nenhuma fonte disponível"
